@@ -1,5 +1,6 @@
 import { getOpenAIClient } from '@/lib/openai';
 import { geminiModel } from '@/lib/gemini';
+import { groq } from '@/lib/groq';
 import { createClient } from '@/lib/supabase-server';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -64,11 +65,46 @@ export async function POST(req: NextRequest) {
     Product Context:
     ${JSON.stringify(productContext)}`;
 
-    const provider = process.env.AI_PROVIDER || 'gemini';
+    const provider = process.env.AI_PROVIDER || 'groq';
     console.log(`Using AI Provider: ${provider}`);
     const encoder = new TextEncoder();
 
-    if (provider === 'gemini') {
+    if (provider === 'groq') {
+      const streamResponse = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: question }
+        ],
+        stream: true,
+      });
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          let fullAnswer = '';
+          try {
+            for await (const chunk of streamResponse) {
+              const content = chunk.choices[0]?.delta?.content || '';
+              if (content) {
+                fullAnswer += content;
+                controller.enqueue(encoder.encode(content));
+              }
+            }
+            await saveToHistory(supabase, user.id, question, fullAnswer);
+          } catch (err) {
+            console.error('Groq Stream Error:', err);
+            controller.error(err);
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+      });
+
+    } else if (provider === 'gemini') {
       const result = await geminiModel.generateContentStream({
         contents: [
           { role: 'user', parts: [{ text: `System: ${systemPrompt}\n\nUser: ${question}` }] }
@@ -117,15 +153,21 @@ export async function POST(req: NextRequest) {
       const stream = new ReadableStream({
         async start(controller) {
           let fullAnswer = '';
-          for await (const chunk of streamResponse) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
-              fullAnswer += content;
-              controller.enqueue(encoder.encode(content));
+          try {
+            for await (const chunk of streamResponse) {
+              const content = chunk.choices[0]?.delta?.content || '';
+              if (content) {
+                fullAnswer += content;
+                controller.enqueue(encoder.encode(content));
+              }
             }
+            await saveToHistory(supabase, user.id, question, fullAnswer);
+          } catch (err) {
+            console.error('OpenAI Stream Error:', err);
+            controller.error(err);
+          } finally {
+            controller.close();
           }
-          await saveToHistory(supabase, user.id, question, fullAnswer);
-          controller.close();
         },
       });
 

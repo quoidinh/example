@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquare, Clock, ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
-interface QueryEntry {
+export interface QueryEntry {
   id: string;
   question: string;
   answer: string;

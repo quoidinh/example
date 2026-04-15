@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { SummaryHeader } from '@/components/dashboard/summary-header';
 import { ProductTable } from '@/components/dashboard/product-table';
 import { AiAssistant } from '@/components/dashboard/ai-assistant';
-import { QueryHistory } from '@/components/dashboard/query-history';
+import { QueryHistory, type QueryEntry } from '@/components/dashboard/query-history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export default async function DashboardPage() {
     .order('name');
 
   // Fetch recent queries
-  let queryHistory = [];
+  let queryHistory: QueryEntry[] = [];
   if (user) {
     const { data: qh, error: qhError } = await supabase
       .from('query_history')
